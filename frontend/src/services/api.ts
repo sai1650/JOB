@@ -12,29 +12,43 @@ const api = axios.create({
   withCredentials: true,
 })
 
-export const uploadResume = (file: File) => {
+export const uploadResume = (file: File, name: string = '', email: string = '') => {
   const formData = new FormData()
   formData.append('file', file)
-  // Backend expects name and email parameters (defaults handled server-side)
-  formData.append('name', '')
-  formData.append('email', '')
   
-  console.log(`[DEBUG] Uploading resume to: ${baseURL}/api/resume/upload`, {
+  // Backend expects name and email as QUERY PARAMETERS, not form fields
+  // Build URL with query parameters
+  const params = new URLSearchParams()
+  if (name.trim()) params.append('name', name.trim())
+  if (email.trim()) params.append('email', email.trim())
+  
+  const uploadUrl = `/api/resume/upload${params.toString() ? '?' + params.toString() : ''}`
+  
+  console.log(`[DEBUG] Upload URL: ${baseURL}${uploadUrl}`, {
     filename: file.name,
     size: file.size,
     type: file.type,
+    withName: !!name.trim(),
+    withEmail: !!email.trim(),
   })
   
-  return api.post('/api/resume/upload', formData).catch(err => {
-    console.error('[ERROR] Resume upload failed:', {
-      status: err?.response?.status,
-      statusText: err?.response?.statusText,
-      message: err?.message,
-      data: err?.response?.data,
-      url: err?.config?.url,
+  return api.post(uploadUrl, formData)
+    .then(response => {
+      console.log('[DEBUG] Upload response status:', response.status)
+      console.log('[DEBUG] Upload response data:', response.data)
+      return response
     })
-    throw err
-  })
+    .catch(err => {
+      console.error('[ERROR] Resume upload failed:', {
+        status: err?.response?.status,
+        statusText: err?.response?.statusText,
+        code: err?.code,
+        message: err?.message,
+        data: err?.response?.data,
+        requestUrl: err?.config?.url,
+      })
+      throw err
+    })
 }
 
 export default api

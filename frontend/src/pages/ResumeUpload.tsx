@@ -92,10 +92,24 @@ export default function ResumeUpload() {
     setLoading(true)
     setError(null)
     console.log('[DEBUG] Starting resume upload for:', selectedFile.name)
+    console.log('[DEBUG] baseURL from env:', import.meta.env.VITE_API_URL || 'using /api proxy')
+    
     try {
       const res = await uploadResume(selectedFile)
-      console.log('[DEBUG] Resume upload successful:', res.data)
+      
+      // Verify we got a successful response
+      if (!res || !res.data) {
+        throw new Error('Empty response from server')
+      }
+      
+      console.log('[DEBUG] Resume upload successful, status:', res.status)
+      console.log('[DEBUG] Response candidate_id:', res.data.candidate_id)
+      
       const cid = res.data.candidate_id
+      if (!cid) {
+        throw new Error('No candidate_id in response')
+      }
+      
       localStorage.setItem('candidate_id', cid)
       const uploadedFilename = res.data?.filename || selectedFile.name
       setProfileFilename(uploadedFilename)
@@ -113,33 +127,43 @@ export default function ResumeUpload() {
       // navigate to role selection after short delay for UX
       setTimeout(() => navigate('/roles'), 900)
     } catch (err: any) {
-      console.error('[ERROR] Resume upload exception:', err)
+      console.error('[ERROR] Full error object:', err)
+      console.error('[ERROR] Error status:', err?.response?.status)
+      console.error('[ERROR] Error message:', err?.message)
+      console.error('[ERROR] Error code:', err?.code)
       
       // Timeout error
       if (err?.code === 'ECONNABORTED') {
         setError('Resume processing service is unavailable. Please try again.')
       }
-      // Bad request or file size errors
+      // Network errors
+      else if (err?.code === 'ERR_NETWORK' || err?.code === 'ENOTFOUND' || err?.message?.includes('Network')) {
+        setError('Network error. Please check your internet connection and try again.')
+      }
+      // Bad request or file size errors (4xx)
       else if (err?.response?.status === 400) {
         setError(err?.response?.data?.detail || 'Please upload a valid PDF or TXT file.')
       } else if (err?.response?.status === 413) {
         setError('File size must be less than 5 MB.')
       }
-      // Network/CORS errors
-      else if (err?.code === 'ERR_NETWORK' || err?.message === 'Network Error') {
-        setError('Network error. Please check your connection and try again.')
+      // CORS or other client errors
+      else if (err?.response?.status && err?.response?.status >= 400 && err?.response?.status < 500) {
+        setError(err?.response?.data?.detail || `Upload error: ${err?.response?.status}`)
       }
-      // Server errors
-      else if (err?.response?.status >= 500) {
-        setError(`Server error (${err?.response?.status}). Please try again.`)
+      // Server errors (5xx)
+      else if (err?.response?.status && err?.response?.status >= 500) {
+        console.error('[ERROR] Server returned:', err?.response?.status, err?.response?.data)
+        setError(err?.response?.data?.detail || `Server error (${err?.response?.status}). Please try again.`)
       }
-      // Fallback: show actual error if available
-      else if (err?.response?.data?.detail) {
-        setError(err.response.data.detail)
+      // Response validation error (e.g., no candidate_id)
+      else if (err?.message?.includes('candidate_id') || err?.message?.includes('Empty response')) {
+        console.error('[ERROR] Response validation failed:', err?.message)
+        setError('Server response was invalid. Please try again.')
       }
-      // Last resort
+      // Fallback: show actual error message
       else {
-        const errorMsg = err?.message || 'Unable to process this resume.'
+        const errorMsg = err?.response?.data?.detail || err?.message || 'Unable to process this resume.'
+        console.error('[ERROR] Fallback error:', errorMsg)
         setError(errorMsg)
       }
     } finally {

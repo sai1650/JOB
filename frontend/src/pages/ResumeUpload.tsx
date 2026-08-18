@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { uploadResume } from '../services/api'
+import { uploadResume, API_BASE_URL } from '../services/api'
 import { useNavigate } from 'react-router-dom'
 import FileUpload from '../components/FileUpload'
 import Button from '../components/Button'
@@ -92,8 +92,9 @@ export default function ResumeUpload() {
     setLoading(true)
     setError(null)
     console.log('[UPLOAD] Starting resume upload:', selectedFile.name)
-    console.log('[UPLOAD] API endpoint will be:', `${import.meta.env.VITE_API_URL || 'using /api proxy'}/api/resume/upload`)
-    
+    console.log('[UPLOAD] API base URL:', API_BASE_URL || 'relative / (development proxy)')
+    console.log('[UPLOAD] API endpoint will be:', `${API_BASE_URL || ''}/api/resume/upload`)
+
     try {
       console.log('[UPLOAD] Calling uploadResume with file:', selectedFile.name)
       const res = await uploadResume(selectedFile)

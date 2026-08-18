@@ -10,7 +10,9 @@ export default defineConfig(async () => {
     server: {
       port: Number(process.env.FRONTEND_PORT) || 5173,
 
-      // Allow Render's *.onrender.com hostname
+      // Allow Render's *.onrender.com hostname.
+      // The production frontend must use the backend's absolute Render URL,
+      // not this dev-only proxy.
       allowedHosts: ['.onrender.com'],
 
       proxy: {

@@ -91,25 +91,44 @@ export default function ResumeUpload() {
 
     setLoading(true)
     setError(null)
-    console.log('[DEBUG] Starting resume upload for:', selectedFile.name)
-    console.log('[DEBUG] baseURL from env:', import.meta.env.VITE_API_URL || 'using /api proxy')
+    console.log('[UPLOAD] Starting resume upload:', selectedFile.name)
+    console.log('[UPLOAD] API endpoint will be:', `${import.meta.env.VITE_API_URL || 'using /api proxy'}/api/resume/upload`)
     
     try {
+      console.log('[UPLOAD] Calling uploadResume with file:', selectedFile.name)
       const res = await uploadResume(selectedFile)
       
+      console.log('[UPLOAD] Response received')
+      console.log('[UPLOAD] Response status:', res?.status)
+      console.log('[UPLOAD] Response statusText:', res?.statusText)
+      console.log('[UPLOAD] Response.data exists:', !!res?.data)
+      console.log('[UPLOAD] Full response.data:', JSON.stringify(res?.data, null, 2))
+      
       // Verify we got a successful response
-      if (!res || !res.data) {
+      if (!res) {
+        console.error('[UPLOAD] No response object')
+        throw new Error('No response from server')
+      }
+      
+      if (res.status !== 200) {
+        console.error('[UPLOAD] Unexpected status code:', res.status)
+        throw new Error(`Expected 200, got ${res.status}`)
+      }
+      
+      if (!res.data) {
+        console.error('[UPLOAD] Response has no data')
         throw new Error('Empty response from server')
       }
       
-      console.log('[DEBUG] Resume upload successful, status:', res.status)
-      console.log('[DEBUG] Response candidate_id:', res.data.candidate_id)
-      
       const cid = res.data.candidate_id
+      console.log('[UPLOAD] Extracted candidate_id:', cid)
+      
       if (!cid) {
+        console.error('[UPLOAD] No candidate_id in response')
         throw new Error('No candidate_id in response')
       }
       
+      console.log('[UPLOAD] SUCCESS - Storing candidate data')
       localStorage.setItem('candidate_id', cid)
       const uploadedFilename = res.data?.filename || selectedFile.name
       setProfileFilename(uploadedFilename)
@@ -121,52 +140,73 @@ export default function ResumeUpload() {
         domains: res.data?.profile?.domains || res.data?.domains || [],
         projects: res.data?.profile?.projects || [],
       }
+      console.log('[UPLOAD] Parsed profile:', parsedProfile)
       setProfile(parsedProfile)
       localStorage.setItem('candidate_profile', JSON.stringify(parsedProfile))
       setUploadStatus('done')
+      console.log('[UPLOAD] Will navigate to /roles in 900ms')
       // navigate to role selection after short delay for UX
-      setTimeout(() => navigate('/roles'), 900)
+      setTimeout(() => {
+        console.log('[UPLOAD] Navigating to /roles')
+        navigate('/roles')
+      }, 900)
     } catch (err: any) {
-      console.error('[ERROR] Full error object:', err)
-      console.error('[ERROR] Error status:', err?.response?.status)
-      console.error('[ERROR] Error message:', err?.message)
-      console.error('[ERROR] Error code:', err?.code)
+      console.error('[UPLOAD ERROR] === UPLOAD FAILED ===')
+      console.error('[UPLOAD ERROR] Full error:', err)
+      console.error('[UPLOAD ERROR] error.response?.status:', err?.response?.status)
+      console.error('[UPLOAD ERROR] error.response?.statusText:', err?.response?.statusText)
+      console.error('[UPLOAD ERROR] error.response?.data:', err?.response?.data)
+      console.error('[UPLOAD ERROR] error.message:', err?.message)
+      console.error('[UPLOAD ERROR] error.code:', err?.code)
+      console.error('[UPLOAD ERROR] error.config?.url:', err?.config?.url)
+      
+      let displayError = 'Unable to process this resume.'
       
       // Timeout error
       if (err?.code === 'ECONNABORTED') {
-        setError('Resume processing service is unavailable. Please try again.')
+        displayError = 'Resume processing service is unavailable (timeout). Please try again.'
+        console.error('[UPLOAD ERROR] → Timeout error')
       }
       // Network errors
       else if (err?.code === 'ERR_NETWORK' || err?.code === 'ENOTFOUND' || err?.message?.includes('Network')) {
-        setError('Network error. Please check your internet connection and try again.')
+        displayError = 'Network error. Please check your internet connection and try again.'
+        console.error('[UPLOAD ERROR] → Network error')
       }
-      // Bad request or file size errors (4xx)
+      // 400 Bad Request
       else if (err?.response?.status === 400) {
-        setError(err?.response?.data?.detail || 'Please upload a valid PDF or TXT file.')
-      } else if (err?.response?.status === 413) {
-        setError('File size must be less than 5 MB.')
+        displayError = err?.response?.data?.detail || 'Please upload a valid PDF or TXT file.'
+        console.error('[UPLOAD ERROR] → 400 Bad Request')
       }
-      // CORS or other client errors
+      // 413 Payload Too Large
+      else if (err?.response?.status === 413) {
+        displayError = 'File size must be less than 5 MB.'
+        console.error('[UPLOAD ERROR] → 413 Payload Too Large')
+      }
+      // 4xx Client errors
       else if (err?.response?.status && err?.response?.status >= 400 && err?.response?.status < 500) {
-        setError(err?.response?.data?.detail || `Upload error: ${err?.response?.status}`)
+        displayError = err?.response?.data?.detail || `Upload error: ${err?.response?.status}`
+        console.error('[UPLOAD ERROR] → Client error:', err?.response?.status)
       }
-      // Server errors (5xx)
+      // 5xx Server errors
       else if (err?.response?.status && err?.response?.status >= 500) {
-        console.error('[ERROR] Server returned:', err?.response?.status, err?.response?.data)
-        setError(err?.response?.data?.detail || `Server error (${err?.response?.status}). Please try again.`)
+        displayError = err?.response?.data?.detail || `Server error (${err?.response?.status}). Please try again.`
+        console.error('[UPLOAD ERROR] → Server error:', err?.response?.status)
       }
-      // Response validation error (e.g., no candidate_id)
-      else if (err?.message?.includes('candidate_id') || err?.message?.includes('Empty response')) {
-        console.error('[ERROR] Response validation failed:', err?.message)
-        setError('Server response was invalid. Please try again.')
+      // Response validation error
+      else if (err?.message?.includes('candidate_id') || err?.message?.includes('Empty response') || err?.message?.includes('status') || err?.message?.includes('No response')) {
+        displayError = err?.message || 'Server response was invalid. Please try again.'
+        console.error('[UPLOAD ERROR] → Response validation error:', err?.message)
       }
-      // Fallback: show actual error message
+      // Fallback
       else {
-        const errorMsg = err?.response?.data?.detail || err?.message || 'Unable to process this resume.'
-        console.error('[ERROR] Fallback error:', errorMsg)
-        setError(errorMsg)
+        displayError = err?.response?.data?.detail || err?.message || 'Unable to process this resume.'
+        console.error('[UPLOAD ERROR] → Fallback error:', displayError)
       }
+      
+      console.error('[UPLOAD ERROR] Will show user:', displayError)
+      setError(displayError)
     } finally {
+      console.log('[UPLOAD] Upload request completed, loading state set to false')
       setLoading(false)
     }
   }

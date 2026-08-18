@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import axios from 'axios'
+import api from '../services/api'
 import Button from '../components/Button'
 
 export default function Landing() {
@@ -8,7 +8,7 @@ export default function Landing() {
   useEffect(() => {
     const fetch = async () => {
       try {
-        const res = await axios.get('/api/health')
+        const res = await api.get('/api/health')
         setStatus(res.data.status)
       } catch (err) {
         setStatus('unreachable')

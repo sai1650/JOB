@@ -1,0 +1,2 @@
+John Doe
+Python FastAPI React SQL

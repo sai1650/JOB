@@ -15,7 +15,26 @@ const api = axios.create({
 export const uploadResume = (file: File) => {
   const formData = new FormData()
   formData.append('file', file)
-  return api.post('/api/resume/upload', formData)
+  // Backend expects name and email parameters (defaults handled server-side)
+  formData.append('name', '')
+  formData.append('email', '')
+  
+  console.log(`[DEBUG] Uploading resume to: ${baseURL}/api/resume/upload`, {
+    filename: file.name,
+    size: file.size,
+    type: file.type,
+  })
+  
+  return api.post('/api/resume/upload', formData).catch(err => {
+    console.error('[ERROR] Resume upload failed:', {
+      status: err?.response?.status,
+      statusText: err?.response?.statusText,
+      message: err?.message,
+      data: err?.response?.data,
+      url: err?.config?.url,
+    })
+    throw err
+  })
 }
 
 export default api

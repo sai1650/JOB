@@ -91,8 +91,10 @@ export default function ResumeUpload() {
 
     setLoading(true)
     setError(null)
+    console.log('[DEBUG] Starting resume upload for:', selectedFile.name)
     try {
       const res = await uploadResume(selectedFile)
+      console.log('[DEBUG] Resume upload successful:', res.data)
       const cid = res.data.candidate_id
       localStorage.setItem('candidate_id', cid)
       const uploadedFilename = res.data?.filename || selectedFile.name
@@ -111,12 +113,34 @@ export default function ResumeUpload() {
       // navigate to role selection after short delay for UX
       setTimeout(() => navigate('/roles'), 900)
     } catch (err: any) {
+      console.error('[ERROR] Resume upload exception:', err)
+      
+      // Timeout error
       if (err?.code === 'ECONNABORTED') {
         setError('Resume processing service is unavailable. Please try again.')
-      } else if (err?.response?.status === 400 || err?.response?.status === 413) {
+      }
+      // Bad request or file size errors
+      else if (err?.response?.status === 400) {
         setError(err?.response?.data?.detail || 'Please upload a valid PDF or TXT file.')
-      } else {
-        setError('Unable to process this resume.')
+      } else if (err?.response?.status === 413) {
+        setError('File size must be less than 5 MB.')
+      }
+      // Network/CORS errors
+      else if (err?.code === 'ERR_NETWORK' || err?.message === 'Network Error') {
+        setError('Network error. Please check your connection and try again.')
+      }
+      // Server errors
+      else if (err?.response?.status >= 500) {
+        setError(`Server error (${err?.response?.status}). Please try again.`)
+      }
+      // Fallback: show actual error if available
+      else if (err?.response?.data?.detail) {
+        setError(err.response.data.detail)
+      }
+      // Last resort
+      else {
+        const errorMsg = err?.message || 'Unable to process this resume.'
+        setError(errorMsg)
       }
     } finally {
       setLoading(false)
